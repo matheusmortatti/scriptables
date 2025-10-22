@@ -1,8 +1,8 @@
 // Daily Motivation Widget
 // Inspirational quote + progress rings for day, week, and year
 
-// Motivational quotes array
-const quotes = [
+// Fallback quotes array (used if API fails)
+const fallbackQuotes = [
   "Every day is a fresh start.",
   "Progress, not perfection.",
   "Small steps every day.",
@@ -35,14 +35,31 @@ const quotes = [
   "Success is a journey."
 ];
 
-// Get quote for today
-function getTodayQuote() {
+// Get quote from ZenQuotes API
+async function getTodayQuote() {
+  try {
+    const request = new Request("https://zenquotes.io/api/today");
+    const response = await request.loadJSON();
+    
+    if (response && response.length > 0 && response[0].q) {
+      return response[0].q;
+    }
+    
+    return getFallbackQuote();
+  } catch (error) {
+    console.log("Failed to fetch quote from API, using fallback");
+    return getFallbackQuote();
+  }
+}
+
+// Get fallback quote based on day of year
+function getFallbackQuote() {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 0);
   const diff = now - start;
   const oneDay = 1000 * 60 * 60 * 24;
   const dayOfYear = Math.floor(diff / oneDay);
-  return quotes[dayOfYear % quotes.length];
+  return fallbackQuotes[dayOfYear % fallbackQuotes.length];
 }
 
 // Calculate day progress (midnight to midnight)
@@ -134,7 +151,7 @@ async function createWidget() {
   widget.setPadding(16, 16, 16, 16);
   
   // Get data
-  const quote = getTodayQuote();
+  const quote = await getTodayQuote();
   const dayProgress = getDayProgress();
   const weekProgress = getWeekProgress();
   const yearProgress = getYearProgress();
