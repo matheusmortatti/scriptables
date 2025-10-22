@@ -25,26 +25,35 @@ async function fetchContributions(username) {
 
 // Organize contributions into weeks (Sunday to Saturday)
 function organizeIntoWeeks(contributions, totalContributions) {
+  if (!contributions || contributions.length === 0) {
+    return { totalContributions: 0, weeks: [] };
+  }
+  
+  const firstDate = new Date(contributions[0].date);
+  const firstDayOfWeek = firstDate.getDay();
+  
   const weeks = [];
   let currentWeek = [];
   
-  contributions.forEach((day, index) => {
-    const date = new Date(day.date);
-    const dayOfWeek = date.getDay();
-    
-    if (index === 0 && dayOfWeek !== 0) {
-      for (let i = 0; i < dayOfWeek; i++) {
-        currentWeek.push({ date: "", count: 0, level: 0 });
-      }
-    }
-    
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    currentWeek.push({ date: "", count: 0, level: 0 });
+  }
+  
+  contributions.forEach(day => {
     currentWeek.push(day);
     
-    if (dayOfWeek === 6 || index === contributions.length - 1) {
+    if (currentWeek.length === 7) {
       weeks.push(currentWeek);
       currentWeek = [];
     }
   });
+  
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push({ date: "", count: 0, level: 0 });
+    }
+    weeks.push(currentWeek);
+  }
   
   return {
     totalContributions: totalContributions,
@@ -66,13 +75,21 @@ function getContributionColor(count, maxCount) {
 
 // Draw contribution grid
 function drawContributionGrid(weeks) {
-  const cellSize = 8;
+  if (!weeks || weeks.length === 0) {
+    const canvas = new DrawContext();
+    canvas.size = new Size(100, 70);
+    canvas.opaque = false;
+    return canvas.getImage();
+  }
+  
+  const cellSize = 7;
   const cellGap = 2;
   const cellTotal = cellSize + cellGap;
   
-  const displayWeeks = weeks.slice(-12);
-  const width = displayWeeks.length * cellTotal;
-  const height = 7 * cellTotal;
+  const displayWeeks = weeks.slice(-17);
+  const numWeeks = displayWeeks.length;
+  const width = numWeeks * cellTotal - cellGap;
+  const height = 7 * cellTotal - cellGap;
   
   const canvas = new DrawContext();
   canvas.size = new Size(width, height);
@@ -95,7 +112,7 @@ function drawContributionGrid(weeks) {
       
       const rect = new Rect(x, y, cellSize, cellSize);
       const path = new Path();
-      path.addRoundedRect(rect, 2, 2);
+      path.addRoundedRect(rect, 1.5, 1.5);
       
       canvas.addPath(path);
       canvas.setFillColor(getContributionColor(day.count, maxCount));
