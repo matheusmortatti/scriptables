@@ -1,57 +1,55 @@
 // GitHub Contributions Widget
 // Displays a GitHub-style contribution graph for a specified user
 
-const USERNAME = "octocat"; // Configure your GitHub username here
+const USERNAME = "matheusmortatti"; // Configure your GitHub username here
 
 // Fetch contribution data from GitHub
 async function fetchContributions(username) {
-  const query = `
-    query($username: String!) {
-      user(login: $username) {
-        contributionsCollection {
-          contributionCalendar {
-            totalContributions
-            weeks {
-              contributionDays {
-                contributionCount
-                date
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-  
-  const url = "https://api.github.com/graphql";
+  const url = `https://github-contributions-api.jogruber.de/v4/${username}?y=last`;
   const req = new Request(url);
-  req.method = "POST";
-  req.headers = {
-    "Content-Type": "application/json"
-  };
-  req.body = JSON.stringify({
-    query: query,
-    variables: { username: username }
-  });
   
   try {
     const res = await req.loadJSON();
     
-    if (res.errors) {
-      console.error("GraphQL errors:", JSON.stringify(res.errors));
+    if (!res || !res.contributions) {
+      console.error("No contribution data found");
       return null;
     }
     
-    if (!res.data || !res.data.user) {
-      console.error("No user data found");
-      return null;
-    }
-    
-    return res.data.user.contributionsCollection.contributionCalendar;
+    return organizeIntoWeeks(res.contributions, res.total.lastYear);
   } catch (error) {
     console.error("Fetch error:", error);
     return null;
   }
+}
+
+// Organize contributions into weeks (Sunday to Saturday)
+function organizeIntoWeeks(contributions, totalContributions) {
+  const weeks = [];
+  let currentWeek = [];
+  
+  contributions.forEach((day, index) => {
+    const date = new Date(day.date);
+    const dayOfWeek = date.getDay();
+    
+    if (index === 0 && dayOfWeek !== 0) {
+      for (let i = 0; i < dayOfWeek; i++) {
+        currentWeek.push({ date: "", count: 0, level: 0 });
+      }
+    }
+    
+    currentWeek.push(day);
+    
+    if (dayOfWeek === 6 || index === contributions.length - 1) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  });
+  
+  return {
+    totalContributions: totalContributions,
+    weeks: weeks
+  };
 }
 
 // Get color for contribution count
@@ -72,7 +70,6 @@ function drawContributionGrid(weeks) {
   const cellGap = 2;
   const cellTotal = cellSize + cellGap;
   
-  // Get last 12 weeks
   const displayWeeks = weeks.slice(-12);
   const width = displayWeeks.length * cellTotal;
   const height = 7 * cellTotal;
@@ -80,18 +77,19 @@ function drawContributionGrid(weeks) {
   const canvas = new DrawContext();
   canvas.size = new Size(width, height);
   canvas.opaque = false;
+  canvas.respectScreenScale = true;
   
-  // Find max contributions for color scaling
   let maxCount = 0;
   displayWeeks.forEach(week => {
-    week.contributionDays.forEach(day => {
-      maxCount = Math.max(maxCount, day.contributionCount);
+    week.forEach(day => {
+      if (day.count > 0) {
+        maxCount = Math.max(maxCount, day.count);
+      }
     });
   });
   
-  // Draw cells
   displayWeeks.forEach((week, weekIndex) => {
-    week.contributionDays.forEach((day, dayIndex) => {
+    week.forEach((day, dayIndex) => {
       const x = weekIndex * cellTotal;
       const y = dayIndex * cellTotal;
       
@@ -100,7 +98,7 @@ function drawContributionGrid(weeks) {
       path.addRoundedRect(rect, 2, 2);
       
       canvas.addPath(path);
-      canvas.setFillColor(getContributionColor(day.contributionCount, maxCount));
+      canvas.setFillColor(getContributionColor(day.count, maxCount));
       canvas.fillPath();
     });
   });
@@ -112,8 +110,10 @@ function drawContributionGrid(weeks) {
 function calculateStreak(weeks) {
   const allDays = [];
   weeks.forEach(week => {
-    week.contributionDays.forEach(day => {
-      allDays.push(day);
+    week.forEach(day => {
+      if (day.date) {
+        allDays.push(day);
+      }
     });
   });
   
@@ -121,7 +121,7 @@ function calculateStreak(weeks) {
   
   let streak = 0;
   for (const day of allDays) {
-    if (day.contributionCount > 0) {
+    if (day.count > 0) {
       streak++;
     } else {
       break;
